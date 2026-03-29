@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body {
+  background:#0f172a;
+  color:white;
+  font-family:Arial;
+}
+#chat {
+  height:80vh;
+  overflow-y:auto;
+  padding:10px;
+}
+.msg {
+  margin:10px;
+  padding:10px;
+  border-radius:10px;
+}
+.user {
+  background:#38bdf8;
+  color:black;
+  text-align:right;
+}
+.ai {
+  background:#1e293b;
+}
+#inputBox {
+  position:fixed;
+  bottom:0;
+  width:100%;
+  display:flex;
+}
+input {
+  flex:1;
+  padding:15px;
+}
+button {
+  padding:15px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="chat"></div>
+
+<div id="inputBox">
+<input id="msg" placeholder="Напиши..." />
+<button onclick="send()">➤</button>
+</div>
+
+<script>
+async function send() {
+  let text = document.getElementById("msg").value;
+  addMessage(text, "user");
+
+  let res = await fetch("/chat", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({text})
+  });
+
+  let data = await res.json();
+  addMessage(data.answer, "ai");
+}
+
+function addMessage(text, type) {
+  let div = document.createElement("div");
+  div.className = "msg " + type;
+  div.innerText = text;
+  document.getElementById("chat").appendChild(div);
+}
+</script>
+
+</body>
+</html>
