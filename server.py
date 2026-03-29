@@ -8,6 +8,8 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = FastAPI()
 
+memory = []  # память
+
 class Msg(BaseModel):
     text: str
 
@@ -19,11 +21,18 @@ def home():
 
 @app.post("/chat")
 def chat(msg: Msg):
+
+    memory.append({"role": "user", "content": msg.text})
+
+    messages = [{"role": "system", "content": SYSTEM}] + memory[-10:]
+
     response = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": msg.text}
-        ]
+        messages=messages
     )
-    return {"answer": response.choices[0].message.content}
+
+    answer = response.choices[0].message.content
+
+    memory.append({"role": "assistant", "content": answer})
+
+    return {"answer": answer}
