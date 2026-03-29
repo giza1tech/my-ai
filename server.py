@@ -8,7 +8,6 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = FastAPI()
 
-# файлы
 MEMORY_FILE = "memory.json"
 PROFILE_FILE = "profile.json"
 TASKS_FILE = "tasks.json"
@@ -30,7 +29,6 @@ tasks = load(TASKS_FILE, [])
 class Msg(BaseModel):
     text: str
 
-# 🧠 ПОВЕДЕНИЕ (можешь менять под себя)
 SYSTEM = """
 Ты личный ИИ пользователя.
 
@@ -38,50 +36,24 @@ SYSTEM = """
 - Ты помогаешь во всех задачах
 - Ты адаптируешься под пользователя
 - Ты запоминаешь важную информацию
-- Ты не навязываешь темы
 - Ты отвечаешь чётко и понятно
-- Ты и пользователь одна команда 
 """
 
 @app.get("/")
 def home():
     return FileResponse("index.html")
 
-# 🧠 определяем важное
 def extract_memory(text):
-    keywords = ["меня зовут", "я хочу", "моя цель", "мне важно", "запомни"]
+    keywords = ["меня зовут", "я хочу", "мне важно", "запомни"]
     for k in keywords:
         if k in text.lower():
             return text
-    return None
-
-# 🤖 команды (минимум, без навязывания)
-def handle_commands(text):
-    global tasks
-
-    if text.lower().startswith("задача:"):
-        task = text.replace("задача:", "").strip()
-        tasks.append(task)
-        save(TASKS_FILE, tasks)
-        return f"Добавлено: {task}"
-
-    if text.lower() == "задачи":
-        if not tasks:
-            return "Нет задач"
-        return "\n".join(tasks)
-
     return None
 
 @app.post("/chat")
 def chat(msg: Msg):
     global memory, profile
 
-    # команды
-    cmd = handle_commands(msg.text)
-    if cmd:
-        return {"answer": cmd}
-
-    # память
     important = extract_memory(msg.text)
     if important:
         profile["info"] = profile.get("info", []) + [important]
@@ -111,12 +83,10 @@ def chat(msg: Msg):
 
     return {"answer": answer}
 
-# 📂 файлы и фото
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)):
     content = await file.read()
 
-    # фото
     if file.content_type.startswith("image/"):
         b64 = base64.b64encode(content).decode("utf-8")
 
@@ -140,7 +110,6 @@ async def upload(file: UploadFile = File(...)):
 
         return {"status": response.choices[0].message.content}
 
-    # текст
     text = content.decode("utf-8", errors="ignore")
     memory.append({"role": "system", "content": text[:1000]})
     save(MEMORY_FILE, memory)
