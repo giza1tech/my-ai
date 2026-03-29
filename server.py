@@ -8,12 +8,11 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = FastAPI()
 
-# 📁 файлы
+# файлы
 MEMORY_FILE = "memory.json"
 PROFILE_FILE = "profile.json"
 TASKS_FILE = "tasks.json"
 
-# загрузка
 def load(file, default):
     if os.path.exists(file):
         with open(file, "r") as f:
@@ -31,44 +30,42 @@ tasks = load(TASKS_FILE, [])
 class Msg(BaseModel):
     text: str
 
+# 🧠 ПОВЕДЕНИЕ (можешь менять под себя)
 SYSTEM = """
 Ты личный ИИ пользователя.
 
-Твоя задача:
-- помогать
-- выполнять задачи
-- запоминать важное
-- игнорировать мусор
-
-Если пользователь сообщает важную информацию (имя, цели, деньги, планы) — запоминай.
-Если нет — не сохраняй.
-
-Будь умным ассистентом.
+Правила:
+- Ты помогаешь во всех задачах
+- Ты адаптируешься под пользователя
+- Ты запоминаешь важную информацию
+- Ты не навязываешь темы
+- Ты отвечаешь чётко и понятно
+- Ты и пользователь одна команда 
 """
 
 @app.get("/")
 def home():
     return FileResponse("index.html")
 
-# 🧠 анализ важности
+# 🧠 определяем важное
 def extract_memory(text):
-    important = ["меня зовут", "я хочу", "моя цель", "я работаю", "мой доход"]
-    for key in important:
-        if key in text.lower():
+    keywords = ["меня зовут", "я хочу", "моя цель", "мне важно", "запомни"]
+    for k in keywords:
+        if k in text.lower():
             return text
     return None
 
-# 🤖 команды
+# 🤖 команды (минимум, без навязывания)
 def handle_commands(text):
     global tasks
 
-    if "добавь задачу" in text.lower():
-        task = text.replace("добавь задачу", "").strip()
+    if text.lower().startswith("задача:"):
+        task = text.replace("задача:", "").strip()
         tasks.append(task)
         save(TASKS_FILE, tasks)
-        return f"Задача добавлена: {task}"
+        return f"Добавлено: {task}"
 
-    if "покажи задачи" in text.lower():
+    if text.lower() == "задачи":
         if not tasks:
             return "Нет задач"
         return "\n".join(tasks)
@@ -79,12 +76,12 @@ def handle_commands(text):
 def chat(msg: Msg):
     global memory, profile
 
-    # 🤖 автодействия
+    # команды
     cmd = handle_commands(msg.text)
     if cmd:
         return {"answer": cmd}
 
-    # 🧠 память
+    # память
     important = extract_memory(msg.text)
     if important:
         profile["info"] = profile.get("info", []) + [important]
@@ -94,11 +91,10 @@ def chat(msg: Msg):
 
     messages = [{"role": "system", "content": SYSTEM}]
 
-    # добавляем профиль
     if "info" in profile:
         messages.append({
             "role": "system",
-            "content": f"Факты о пользователе: {profile['info']}"
+            "content": f"Информация о пользователе: {profile['info']}"
         })
 
     messages += memory[-10:]
@@ -115,11 +111,12 @@ def chat(msg: Msg):
 
     return {"answer": answer}
 
-# 📂 файлы / фото
+# 📂 файлы и фото
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)):
     content = await file.read()
 
+    # фото
     if file.content_type.startswith("image/"):
         b64 = base64.b64encode(content).decode("utf-8")
 
@@ -129,7 +126,7 @@ async def upload(file: UploadFile = File(...)):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Что на изображении?"},
+                        {"type": "text", "text": "Опиши изображение"},
                         {
                             "type": "image_url",
                             "image_url": {
@@ -143,6 +140,7 @@ async def upload(file: UploadFile = File(...)):
 
         return {"status": response.choices[0].message.content}
 
+    # текст
     text = content.decode("utf-8", errors="ignore")
     memory.append({"role": "system", "content": text[:1000]})
     save(MEMORY_FILE, memory)
