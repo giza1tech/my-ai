@@ -20,9 +20,7 @@ body { background:#0f172a; color:white; font-family:Arial; }
 input { flex:1; padding:15px; }
 button { padding:15px; }
 
-#fileInput {
-  display:none;
-}
+#fileInput { display:none; }
 </style>
 </head>
 
@@ -34,29 +32,43 @@ button { padding:15px; }
 <input id="msg" placeholder="Напиши..." />
 <button onclick="send()">➤</button>
 <button onclick="uploadClick()">📎</button>
-<input type="file" id="fileInput" onchange="uploadFile()" accept=".txt,.pdf,.jpg,.png" />
+<input type="file" id="fileInput" onchange="uploadFile()" accept=".txt,.jpg,.png" />
 </div>
 
 <script>
+
 async function send() {
-  let text = document.getElementById("msg").value;
+  let input = document.getElementById("msg");
+  let text = input.value.trim();
+
+  if (!text) return;
+
   addMessage(text, "user");
+  input.value = "";
 
-  let res = await fetch("/chat", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({text})
-  });
+  try {
+    let res = await fetch("/chat", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({text})
+    });
 
-  let data = await res.json();
-  addMessage(data.answer, "ai");
+    let data = await res.json();
+    addMessage(data.answer || "Ошибка ответа", "ai");
+
+  } catch {
+    addMessage("Ошибка соединения", "ai");
+  }
 }
 
 function addMessage(text, type) {
   let div = document.createElement("div");
   div.className = "msg " + type;
   div.innerText = text;
-  document.getElementById("chat").appendChild(div);
+
+  let chat = document.getElementById("chat");
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
 }
 
 function uploadClick() {
@@ -78,8 +90,9 @@ async function uploadFile() {
 
   let data = await res.json();
 
-  addMessage("Файл добавлен в память", "ai");
+  addMessage(data.status || "Готово", "ai");
 }
+
 </script>
 
 </body>
