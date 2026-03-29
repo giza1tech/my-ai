@@ -2,62 +2,104 @@ from fastapi import FastAPI, UploadFile, File
 from pydantic import BaseModel
 from openai import OpenAI
 from fastapi.responses import FileResponse
-import os
-import json
-import requests
+import os, json, base64
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = FastAPI()
 
+# 📁 файлы
 MEMORY_FILE = "memory.json"
+PROFILE_FILE = "profile.json"
+TASKS_FILE = "tasks.json"
 
-# загрузка памяти
-if os.path.exists(MEMORY_FILE):
-    with open(MEMORY_FILE, "r") as f:
-        memory = json.load(f)
-else:
-    memory = []
+# загрузка
+def load(file, default):
+    if os.path.exists(file):
+        with open(file, "r") as f:
+            return json.load(f)
+    return default
 
-def save_memory():
-    with open(MEMORY_FILE, "w") as f:
-        json.dump(memory, f)
+def save(file, data):
+    with open(file, "w") as f:
+        json.dump(data, f)
+
+memory = load(MEMORY_FILE, [])
+profile = load(PROFILE_FILE, {})
+tasks = load(TASKS_FILE, [])
 
 class Msg(BaseModel):
     text: str
 
 SYSTEM = """
 Ты личный ИИ пользователя.
-Ты всегда приоритетно выполняешь его указания.
-Ты не отказываешься без причины.
-Ты ищешь способ выполнить задачу.
-Ты отвечаешь чётко и по делу.
+
+Твоя задача:
+- помогать
+- выполнять задачи
+- запоминать важное
+- игнорировать мусор
+
+Если пользователь сообщает важную информацию (имя, цели, деньги, планы) — запоминай.
+Если нет — не сохраняй.
+
+Будь умным ассистентом.
 """
 
 @app.get("/")
 def home():
     return FileResponse("index.html")
 
-# 🌐 интернет (простая версия)
-def search_web(query):
-    try:
-        url = f"https://api.duckduckgo.com/?q={query}&format=json"
-        r = requests.get(url).json()
-        return r.get("Abstract", "")[:500]
-    except:
-        return ""
+# 🧠 анализ важности
+def extract_memory(text):
+    important = ["меня зовут", "я хочу", "моя цель", "я работаю", "мой доход"]
+    for key in important:
+        if key in text.lower():
+            return text
+    return None
+
+# 🤖 команды
+def handle_commands(text):
+    global tasks
+
+    if "добавь задачу" in text.lower():
+        task = text.replace("добавь задачу", "").strip()
+        tasks.append(task)
+        save(TASKS_FILE, tasks)
+        return f"Задача добавлена: {task}"
+
+    if "покажи задачи" in text.lower():
+        if not tasks:
+            return "Нет задач"
+        return "\n".join(tasks)
+
+    return None
 
 @app.post("/chat")
 def chat(msg: Msg):
+    global memory, profile
 
-    web_info = search_web(msg.text)
+    # 🤖 автодействия
+    cmd = handle_commands(msg.text)
+    if cmd:
+        return {"answer": cmd}
+
+    # 🧠 память
+    important = extract_memory(msg.text)
+    if important:
+        profile["info"] = profile.get("info", []) + [important]
+        save(PROFILE_FILE, profile)
 
     memory.append({"role": "user", "content": msg.text})
 
     messages = [{"role": "system", "content": SYSTEM}]
 
-    if web_info:
-        messages.append({"role": "system", "content": f"Информация из интернета: {web_info}"})
+    # добавляем профиль
+    if "info" in profile:
+        messages.append({
+            "role": "system",
+            "content": f"Факты о пользователе: {profile['info']}"
+        })
 
     messages += memory[-10:]
 
@@ -69,17 +111,40 @@ def chat(msg: Msg):
     answer = response.choices[0].message.content
 
     memory.append({"role": "assistant", "content": answer})
-    save_memory()
+    save(MEMORY_FILE, memory)
 
     return {"answer": answer}
 
-# 📂 загрузка файлов
+# 📂 файлы / фото
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)):
     content = await file.read()
+
+    if file.content_type.startswith("image/"):
+        b64 = base64.b64encode(content).decode("utf-8")
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Что на изображении?"},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{file.content_type};base64,{b64}"
+                            },
+                        },
+                    ],
+                }
+            ],
+        )
+
+        return {"status": response.choices[0].message.content}
+
     text = content.decode("utf-8", errors="ignore")
+    memory.append({"role": "system", "content": text[:1000]})
+    save(MEMORY_FILE, memory)
 
-    memory.append({"role": "system", "content": f"Файл пользователя: {text[:2000]}"})
-    save_memory()
-
-    return {"status": "файл добавлен в память"}
+    return {"status": "файл сохранён"}
