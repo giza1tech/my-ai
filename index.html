@@ -32,7 +32,7 @@ button { padding:15px; }
 <input id="msg" placeholder="Напиши..." />
 <button onclick="send()">➤</button>
 <button onclick="uploadClick()">📎</button>
-<input type="file" id="fileInput" onchange="uploadFile()" accept=".txt,.jpg,.png" />
+<input type="file" id="fileInput" onchange="uploadFile()" />
 </div>
 
 <script>
@@ -50,13 +50,16 @@ async function send() {
     let res = await fetch("/chat", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({text})
+      body: JSON.stringify({ text: text })
     });
 
     let data = await res.json();
-    addMessage(data.answer || "Ошибка ответа", "ai");
 
-  } catch {
+    console.log(data); // 🔥 покажет ответ в консоли
+
+    addMessage(data.answer ? data.answer : JSON.stringify(data), "ai");
+
+  } catch (err) {
     addMessage("Ошибка соединения", "ai");
   }
 }
@@ -81,8 +84,6 @@ async function uploadFile() {
   let formData = new FormData();
   formData.append("file", file);
 
-  addMessage("Загружаю файл...", "user");
-
   let res = await fetch("/upload", {
     method: "POST",
     body: formData
@@ -90,7 +91,7 @@ async function uploadFile() {
 
   let data = await res.json();
 
-  addMessage(data.status || "Готово", "ai");
+  addMessage(data.status || "Файл загружен", "ai");
 }
 
 </script>
