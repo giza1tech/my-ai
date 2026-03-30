@@ -6,7 +6,7 @@ import os
 
 app = FastAPI()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = OpenAI()  # ключ берётся автоматически из Environment
 
 class Msg(BaseModel):
     text: str
@@ -23,9 +23,7 @@ def chat(msg: Msg):
             input=msg.text
         )
 
-        answer = response.output[0].content[0].text
-
-        return {"answer": answer}
+        return {"answer": response.output_text}
 
     except Exception as e:
-        return {"answer": f"Ошибка сервера: {str(e)}"}
+        return {"answer": "Ошибка: " + str(e)}
